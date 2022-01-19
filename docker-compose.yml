@@ -1,0 +1,124 @@
+version: '2'
+
+services:
+  dev:
+    build:
+      dockerfile: Dockerfile-test
+      context: .
+      args:
+        - MIX_ENV=dev
+        - BUNDLE_GITHUB__COM=${BUNDLE_GITHUB__COM}
+    env_file:
+      - docker-compose.dev.env
+    depends_on:
+      - database
+      - rabbitmq
+      - grafana
+      - prometheus
+    ports:
+      - "4000:4000"
+      - "4001:4001"
+      - "8000:8000"
+    volumes:
+      - .:/assignment-system
+    command: >
+      bash -c 'dockerize -wait tcp://database:5432 -wait tcp://rabbitmq:5672
+        bash -c "mix do ecto.create -r Datastore.Repo, ecto.migrate -r Datastore.Repo, phx.server"'
+    networks:
+      default:
+        aliases:
+          - assignment_system.dev
+
+  unit-tests:
+    build:
+      dockerfile: Dockerfile-test
+      context: .
+      args:
+        - MIX_ENV=test
+        - BUNDLE_GITHUB__COM=${BUNDLE_GITHUB__COM}
+    env_file:
+      - docker-compose.test.env
+    environment:
+      MIX_ENV: test
+    depends_on:
+      - database
+      - rabbitmq
+    command: >
+      bash -c 'dockerize -wait tcp://database:5432 -wait tcp://rabbitmq:5672
+        bash -c "mix test --raise && epmd -daemon && mix test.cluster --raise"'
+
+  integration-tests:
+    build:
+      dockerfile: Dockerfile-test
+      context: .
+      args:
+        - MIX_ENV=acceptance
+        - BUNDLE_GITHUB__COM=${BUNDLE_GITHUB__COM}
+    env_file:
+      - docker-compose.test.env
+    environment:
+      MIX_ENV: acceptance
+    depends_on:
+      - database
+      - rabbitmq
+    command: >
+      bash -c 'dockerize -wait tcp://database:5432 -wait tcp://rabbitmq:5672
+        bash -c "mix acceptance"'
+
+  jmeter-tests:
+    build:
+      context: ./jmeter
+      dockerfile: Dockerfile-test
+    environment:
+      - CLIENT_ID=${CLIENT_ID}
+      - SECRET_ID=${SECRET_ID}
+    command: ./run.sh
+    volumes:
+      - ./jmeter/get-occupancy-function.jar:/opt/apache-jmeter-5.1/lib/ext/get-occupancy-function.jar
+      - ./jmeter/test.jmx:/opt/apache-jmeter-5.1/bin/jmx/test.jmx
+      - ./jmeter/data_set_config.csv:/opt/apache-jmeter-5.1/bin/jmx/data_set_config.csv
+      - ./jmeter/results:/opt/apache-jmeter-5.1/bin/jmx/results
+
+  database:
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: datastore_pass
+      POSTGRES_USER: datastore_user
+    networks:
+      default:
+        aliases:
+          - database
+
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    ports:
+      - "5672:5672"
+    networks:
+      default:
+        aliases:
+          - rabbitmq
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    networks:
+      default:
+        aliases:
+          - prometheus.dev
+
+  grafana:
+    image: grafana/grafana
+    volumes:
+      - "./monitoring/grafana/provisioning:/etc/grafana/provisioning"
+      - "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards"
+    ports:
+      - "3000:3000"
+    networks:
+      default:
+        aliases:
+          - grafana.dev
