@@ -1,0 +1,27 @@
+FROM adoptopenjdk/openjdk11:jre
+ENV JMETER_VERSION "5.1"
+ENV JMETER_HOME /opt/apache-jmeter-${JMETER_VERSION}
+ENV JMETER_BIN ${JMETER_HOME}/bin
+ENV PATH $PATH:$JMETER_BIN
+ENV JMETER_DOWNLOAD_URL https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz
+ENV JMETER_PLUGIN_URL http://search.maven.org/remotecontent?filepath=kg/apc/jmeter-plugins-manager/1.3/jmeter-plugins-manager-1.3.jar
+ENV TZ "Europe/Lisbon"
+
+WORKDIR	${JMETER_HOME}
+
+RUN apt-get -y update && \
+	apt-get -y install \
+	wget \
+	tar \
+	nano
+
+RUN wget ${JMETER_DOWNLOAD_URL} \	
+	&& tar -xzf ${JMETER_HOME}/apache-jmeter-${JMETER_VERSION}.tgz -C /opt  \
+	&& rm -rf ${JMETER_HOME}/apache-jmeter-${JMETER_VERSION}.tgz \
+	&& mkdir ${JMETER_HOME}/bin/jmx
+
+RUN wget ${JMETER_PLUGIN_URL} -O ./lib/ext/jmeter-plugins-manager-1.3.jar
+
+COPY ./run.sh ./run.sh
+RUN chmod +x ./run.sh
+
